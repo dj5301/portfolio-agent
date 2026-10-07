@@ -158,8 +158,8 @@ def clear(session_id: str | None = None):
     return {"status": "ok"}
 
 
-@app.get("/healthz")
-def healthz():
+@app.get("/health")
+def health():
     return {"status": "ok", "model": MODEL}
 
 

@@ -2,7 +2,7 @@
 
 **A conversational portfolio analysis agent that connects investment allocations with real-life cash needs.**
 
-> Project status: implemented and running locally; cloud deployment pending (see *Setup and deployment status*). This README is an AI-assisted working draft for the author to review and rewrite in their own words before submission, consistent with the course's writing policy.
+> Project status: implemented and deployed (see *Deployment*). This README is an AI-assisted working draft for the author to review and rewrite in their own words before submission, consistent with the course's writing policy.
 
 ## The problem
 
@@ -108,7 +108,7 @@ The `/chat` response preserves the starter contract:
 }
 ```
 
-Additional endpoints: `GET /state?session_id=` (portfolio state for the UI panels, no price series), `POST /clear?session_id=`, `GET /healthz`.
+Additional endpoints: `GET /state?session_id=` (portfolio state for the UI panels, no price series), `POST /clear?session_id=`, `GET /health`.
 
 Sessions live in process memory. On Cloud Run this requires a single instance (`--max-instances 1`) or a shared store such as Firestore; the first version uses the single-instance setting. External data and user text are treated as data, not instructions (stated in the system prompt; tool results are JSON only).
 
@@ -144,11 +144,18 @@ MODEL="ollama_chat/gpt-oss:20b" uv run app.py
 
 Environment variables: `MODEL` (LiteLLM model string), `VERTEX_LOCATION` (default `global`), `VERTEXAI_PROJECT` (GCP project ID; needed locally if your ADC quota project differs), `PORT` (default 8000).
 
-## Setup and deployment status
+## Deployment
 
-Not yet deployed. Planned: GitHub continuous deployment to GCP Cloud Run per the course guide (buildpack, entrypoint `uvicorn app:app --host 0.0.0.0 --port $PORT`, IAP restricted to Columbia accounts, max instances 1). Credentials are supplied through the Cloud Run service account, not committed to the repository.
+Live: **https://portfolio-agent-1060383691779.us-east4.run.app**
 
-Before submission: replace this section with the live URL, fill `submission.json` with the real deployment URL and the author's UNI/email, and keep the service running until grades are released.
+- GCP Cloud Run (`us-east4`), built with Google Cloud buildpacks from this repository; the `Procfile` sets the entrypoint `uvicorn app:app --host 0.0.0.0 --port $PORT`.
+- `--max-instances 1` because sessions are held in process memory.
+- Gemini is called through the Cloud Run service account (`roles/aiplatform.user`); no credentials are committed. `VERTEXAI_PROJECT` is set as a service environment variable.
+- Source: https://github.com/dj5301/portfolio-agent. Continuous deployment from `main` via Developer Connect per the course guide.
+
+Access note: the author's Columbia (CUMC) email is not a Google Workspace account, so the project runs under a personal Google account and the service currently allows unauthenticated access instead of the course's IAP `columbia.edu` policy. This was raised with the instructor; IAP can be enabled with per-email grants if required.
+
+Keep the service running until grades are released.
 
 ## Verification before submission
 
@@ -157,5 +164,5 @@ Before submission: replace this section with the live URL, fill `submission.json
 - [x] Follow-up questions retain state; independent sessions stay separate.
 - [x] Every executed tool appears in the `/chat` response and the UI.
 - [x] Invalid symbols, missing inputs, invalid weights, insufficient assets return actionable errors.
-- [ ] Repeat the above against the deployed URL with Gemini.
+- [x] Three sample queries repeated against the deployed URL with Gemini 2.5 Flash.
 - [ ] Rewrite design-stage statements in the author's own words; record remaining limitations.
