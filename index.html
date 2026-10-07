@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Portfolio Buffer</title>
+        <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+        <style>
+            :root {
+                --ink: #111;
+                --muted: #777;
+                --line: #e4e4e4;
+                --panel: #fafafa;
+                --accent: #0f766e;
+                --warn: #b45309;
+                --bad: #b91c1c;
+                --c1: #0f766e; --c2: #2563eb; --c3: #d97706; --c4: #7c3aed; --c5: #db2777; --c6: #65a30d; --cash: #9ca3af;
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: system-ui, -apple-system, sans-serif; color: var(--ink); background: #fff; height: 100vh; display: flex; flex-direction: column; }
+            header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--line); }
+            header h1 { font-size: 1.1rem; letter-spacing: 0.02em; }
+            header p { color: var(--muted); font-size: 0.85rem; }
+            header button { background: none; border: 1px solid var(--line); padding: 0.4rem 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+            main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); min-height: 0; }
+            @media (max-width: 900px) { main { grid-template-columns: 1fr; overflow-y: auto; } #side { border-left: none; border-top: 1px solid var(--line); } }
+
+            /* Chat */
+            #chat { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+            #messages { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+            .msg { line-height: 1.55; max-width: 90%; font-size: 0.95rem; }
+            .msg.user { align-self: flex-end; background: var(--panel); padding: 0.6rem 0.9rem; border-radius: 10px 10px 2px 10px; }
+            .msg .role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.25rem; }
+            .msg.loading .content { color: var(--muted); }
+            .content table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; }
+            .content th, .content td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; }
+            .content h1, .content h2, .content h3 { font-size: 1rem; margin: 0.75rem 0 0.25rem; }
+            .content ul, .content ol { padding-left: 1.25rem; margin: 0.25rem 0; }
+            .content p { margin: 0.35rem 0; }
+            .content hr { border: none; border-top: 1px solid var(--line); margin: 0.5rem 0; }
+            .content code { font-family: ui-monospace, monospace; font-size: 0.85em; background: var(--panel); padding: 0 0.25em; }
+
+            details.tool { font-family: ui-monospace, monospace; font-size: 0.75rem; color: #444; background: #fffbeb; border-left: 3px solid #f59e0b; padding: 0.4rem 0.75rem; max-width: 90%; }
+            details.tool summary { cursor: pointer; color: var(--warn); text-transform: uppercase; letter-spacing: 0.05em; }
+            details.tool summary b { text-transform: none; letter-spacing: 0; color: #333; }
+            details.tool pre { white-space: pre-wrap; word-break: break-word; margin-top: 0.4rem; }
+            details.tool .k { color: var(--warn); }
+
+            #suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0 1.5rem 0.75rem; }
+            #suggestions button { font-size: 0.78rem; border: 1px solid var(--line); background: #fff; padding: 0.4rem 0.7rem; border-radius: 999px; cursor: pointer; text-align: left; }
+            #suggestions button:hover { border-color: var(--ink); }
+            #input-area { display: flex; gap: 0.75rem; padding: 1rem 1.5rem; border-top: 1px solid var(--line); }
+            #user-input { flex: 1; padding: 0.6rem 0; border: none; border-bottom: 1px solid var(--line); font-size: 1rem; outline: none; }
+            #user-input:focus { border-bottom-color: var(--ink); }
+            #send-btn { padding: 0.6rem 1.25rem; background: var(--ink); color: #fff; border: none; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+            #send-btn:disabled { opacity: 0.3; }
+
+            /* Side panels */
+            #side { overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; background: var(--panel); }
+            section h2 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.6rem; }
+            .empty { color: var(--muted); font-size: 0.85rem; }
+            .card { background: #fff; border: 1px solid var(--line); padding: 0.75rem 0.9rem; }
+            .allocation { display: grid; grid-template-columns: 150px 1fr; gap: 1rem; align-items: center; }
+            .legend { font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.3rem; }
+            .legend div { display: flex; align-items: center; gap: 0.5rem; }
+            .legend i { width: 10px; height: 10px; display: inline-block; border-radius: 2px; }
+            .legend span.v { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+            .total { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.5rem; }
+            .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.6rem; }
+            .stat { background: #fff; border: 1px solid var(--line); padding: 0.6rem 0.75rem; }
+            .stat .l { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+            .stat .n { font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+            .stat .n.neg { color: var(--bad); }
+            .period { font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem; }
+            table.mini { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+            table.mini th, table.mini td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+            table.mini th:first-child, table.mini td:first-child { text-align: left; }
+            table.mini th { font-weight: 500; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+            .badge { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: #ecfdf5; color: #047857; }
+            .badge.bad { background: #fef2f2; color: var(--bad); }
+            .note { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; line-height: 1.4; }
+            footer { padding: 0.5rem 1.5rem; border-top: 1px solid var(--line); font-size: 0.72rem; color: var(--muted); }
+        </style>
+    </head>
+    <body>
+        <header>
+            <div>
+                <h1>Portfolio Buffer</h1>
+                <p>Ask what happens to a small ETF + cash portfolio when markets fall and you need cash at the same time. Every number comes from a tool you can inspect.</p>
+            </div>
+            <button id="new-session">New session</button>
+        </header>
+
+        <main>
+            <div id="chat">
+                <div id="messages"></div>
+                <div id="suggestions">
+                    <button>I hold $6,000 of VTI, $2,000 of BND, and $2,000 in cash. Analyze my allocation and historical risk over the last year. Show the data period and assumptions.</button>
+                    <button>Using that same portfolio, compare it with a target of 50% VTI, 30% BND, and 20% cash. How many dollars would I buy or sell?</button>
+                    <button>Stress-test my original $6,000 VTI, $2,000 BND, and $2,000 cash portfolio. Assume VTI falls 25%, BND falls 8%, and I must pay $4,000 in tuition immediately afterward. Use cash first, then proportional ETF sales.</button>
+                </div>
+                <div id="input-area">
+                    <input type="text" id="user-input" placeholder="Describe your holdings or ask a what-if question…" autocomplete="off" />
+                    <button id="send-btn">Send</button>
+                </div>
+            </div>
+
+            <aside id="side">
+                <section id="holdings-panel">
+                    <h2>Holdings</h2>
+                    <div class="empty">No portfolio yet. Tell the agent your ETF holdings and cash in USD.</div>
+                </section>
+                <section id="risk-panel">
+                    <h2>Historical risk</h2>
+                    <div class="empty">Ask for an analysis over a period to see volatility and drawdown.</div>
+                </section>
+                <section id="scenario-panel">
+                    <h2>Scenarios</h2>
+                    <div class="empty">Rebalance comparisons and cash-need stress tests appear here.</div>
+                </section>
+            </aside>
+        </main>
+        <footer>Educational analysis tool, not personalized financial advice. Historical data is delayed; shocks are hypothetical; simulated trades ignore taxes and fees.</footer>
+
+        <script>
+            const $ = (id) => document.getElementById(id);
+            const messages = $("messages"), userInput = $("user-input"), sendBtn = $("send-btn");
+            let sessionId = null;
+
+            const fmtUsd = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            const fmtPct = (n) => Number(n).toFixed(2) + "%";
+            const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+            const render = (text) => (window.marked ? marked.parse(text) : esc(text).replace(/\n/g, "<br>"));
+
+            function addMessage(role, text, isLoading = false) {
+                const div = document.createElement("div");
+                div.className = "msg " + (role === "you" ? "user" : "assistant") + (isLoading ? " loading" : "");
+                div.innerHTML = '<div class="role">' + role + '</div><div class="content"></div>';
+                const c = div.querySelector(".content");
+                if (role === "you") c.textContent = text; else c.innerHTML = isLoading ? esc(text) : render(text);
+                messages.appendChild(div);
+                messages.scrollTop = messages.scrollHeight;
+                return div;
+            }
+
+            function addToolCall(call, before) {
+                const d = document.createElement("details");
+                d.className = "tool";
+                let result = call.result;
+                try { result = JSON.stringify(JSON.parse(call.result), null, 2); } catch (e) {}
+                d.innerHTML = "<summary>tool call <b>" + esc(call.name) + "</b></summary>" +
+                    '<pre><span class="k">args</span> ' + esc(JSON.stringify(call.args, null, 2)) + "\n<span class=\"k\">result</span> " + esc(result) + "</pre>";
+                messages.insertBefore(d, before);
+            }
+
+            async function send(text) {
+                text = (text ?? userInput.value).trim();
+                if (!text) return;
+                userInput.value = "";
+                sendBtn.disabled = true;
+                addMessage("you", text);
+                const loading = addMessage("assistant", "Thinking…", true);
+                try {
+                    const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, session_id: sessionId }) });
+                    const data = await res.json();
+                    sessionId = data.session_id;
+                    for (const call of data.tool_calls || []) addToolCall(call, loading);
+                    loading.querySelector(".content").innerHTML = render(data.response);
+                    loading.classList.remove("loading");
+                    refreshState();
+                } catch (e) {
+                    loading.querySelector(".content").textContent = "Error: " + e.message;
+                    loading.classList.remove("loading");
+                }
+                messages.scrollTop = messages.scrollHeight;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+
+            // --- Side panels ---
+            const COLORS = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)"];
+            function colorFor(symbol, i) { return symbol === "CASH" ? "var(--cash)" : COLORS[i % COLORS.length]; }
+
+            function donut(weights) {
+                const entries = Object.entries(weights);
+                let acc = 0, segs = "";
+                entries.forEach(([s, w], i) => {
+                    segs += `<circle r="15.9" cx="21" cy="21" fill="transparent" stroke="${colorFor(s, i)}" stroke-width="6" stroke-dasharray="${w} ${100 - w}" stroke-dashoffset="${25 - acc}"></circle>`;
+                    acc += w;
+                });
+                return `<svg viewBox="0 0 42 42" width="150" height="150">${segs}</svg>`;
+            }
+
+            function legend(valuesUsd, weights) {
+                return '<div class="legend">' + Object.entries(weights).map(([s, w], i) =>
+                    `<div><i style="background:${colorFor(s, i)}"></i>${esc(s)}<span class="v">${fmtUsd(valuesUsd[s] ?? 0)} · ${fmtPct(w)}</span></div>`).join("") + "</div>";
+            }
+
+            function weightsOf(holdings, cash) {
+                const total = Object.values(holdings).reduce((a, b) => a + b, 0) + cash;
+                const w = {};
+                for (const [s, v] of Object.entries(holdings)) w[s] = (100 * v) / total;
+                w.CASH = (100 * cash) / total;
+                return { total, w };
+            }
+
+            function renderHoldings(st) {
+                const el = $("holdings-panel");
+                if (!st.holdings) return;
+                const { total, w } = weightsOf(st.holdings, st.cash);
+                el.innerHTML = '<h2>Holdings</h2><div class="card"><div class="total">' + fmtUsd(total) + '</div><div class="allocation">' + donut(w) + legend({ ...st.holdings, CASH: st.cash }, w) + "</div></div>";
+            }
+
+            function renderRisk(st) {
+                const a = st.last_analysis;
+                if (!a) return;
+                const r = a.portfolio_risk, p = a.observation_period;
+                const stat = (l, n, pct = true) => `<div class="stat"><div class="l">${l}</div><div class="n ${n < 0 ? "neg" : ""}">${pct ? fmtPct(n) : n}</div></div>`;
+                let html = '<h2>Historical risk</h2><div class="cards">' + stat("Annualized volatility", r.annualized_volatility_pct) + stat("Max drawdown", r.max_drawdown_pct) + stat("Total return", r.total_return_pct) + "</div>";
+                html += `<div class="period">Data period ${p.start} → ${p.end} (${p.trading_days} trading days). Constant supplied weights, daily rebalancing, cash at 0%.</div>`;
+                html += '<table class="mini" style="margin-top:0.6rem"><tr><th>ETF</th><th>Vol</th><th>Max DD</th><th>Return</th></tr>' +
+                    Object.entries(a.per_etf_risk).map(([s, x]) => `<tr><td>${esc(s)}</td><td>${fmtPct(x.annualized_volatility_pct)}</td><td>${fmtPct(x.max_drawdown_pct)}</td><td>${fmtPct(x.total_return_pct)}</td></tr>`).join("") + "</table>";
+                const warnings = Object.entries(a.data_sources || {}).flatMap(([s, d]) => (d.warnings || []).map((w) => s + ": " + w));
+                if (warnings.length) html += '<div class="note">' + warnings.map(esc).join("<br>") + "</div>";
+                $("risk-panel").innerHTML = html;
+            }
+
+            function renderScenarios(st) {
+                const parts = [];
+                const s = st.last_stress_test;
+                if (s) {
+                    const syms = Object.keys(s.before_shock.holdings_usd);
+                    const row = (label, h) => `<tr><td>${label}</td>${syms.map((k) => `<td>${fmtUsd(h[k] ?? 0)}</td>`).join("")}<td><b>${fmtUsd(Object.values(h).reduce((a, b) => a + b, 0))}</b></td></tr>`;
+                    const f = s.funding;
+                    parts.push(`<div class="card"><h2>Cash-need stress test <span class="badge ${f.expense_covered ? "" : "bad"}">${f.expense_covered ? "expense covered" : "shortfall " + fmtUsd(f.uncovered_shortfall_usd)}</span></h2>
+                        <table class="mini"><tr><th></th>${syms.map((k) => `<th>${esc(k)}</th>`).join("")}<th>Total</th></tr>
+                        ${row("Before", s.before_shock.holdings_usd)}
+                        ${row("After shock (" + syms.filter((k) => k !== "CASH").map((k) => k + " " + (s.shocks_pct[k] ?? 0) + "%").join(", ") + ")", s.after_shock.holdings_usd)}
+                        ${row("After paying " + fmtUsd(s.cash_need_usd), s.after_payment.holdings_usd)}</table>
+                        <div class="note">Cash used ${fmtUsd(f.cash_used_usd)}; ETF sales ${fmtUsd(f.total_etf_sales_usd)}. ${esc(s.liquidation_rule_description)} Hypothetical shock; simulated sales.</div></div>`);
+                }
+                const r = st.last_rebalance;
+                if (r) {
+                    parts.push(`<div class="card"><h2>Rebalance to target</h2><table class="mini"><tr><th>Asset</th><th>Current</th><th>Target</th><th>Trade</th></tr>` +
+                        Object.entries(r.trades).map(([k, t]) => `<tr><td>${esc(k)}</td><td>${fmtUsd(t.current_usd)} (${fmtPct(r.current_weights_pct[k] ?? 0)})</td><td>${fmtUsd(t.target_usd)} (${fmtPct(r.target_weights_pct[k] ?? 0)})</td><td>${t.action === "hold" ? "—" : esc(t.action) + " " + fmtUsd(t.amount_usd)}</td></tr>`).join("") +
+                        `</table><div class="note">Frictionless: no taxes, fees, or slippage. Compares the user's proposed weights; not a recommendation.</div></div>`);
+                }
+                if (parts.length) $("scenario-panel").innerHTML = "<h2>Scenarios</h2>" + parts.join("");
+            }
+
+            async function refreshState() {
+                if (!sessionId) return;
+                try {
+                    const st = await (await fetch("/state?session_id=" + encodeURIComponent(sessionId))).json();
+                    renderHoldings(st); renderRisk(st); renderScenarios(st);
+                } catch (e) { /* panels are optional; the chat still works */ }
+            }
+
+            // --- Wiring ---
+            sendBtn.addEventListener("click", () => send());
+            userInput.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+            for (const b of $("suggestions").querySelectorAll("button")) b.addEventListener("click", () => send(b.textContent));
+            $("new-session").addEventListener("click", async () => {
+                if (sessionId) await fetch("/clear?session_id=" + encodeURIComponent(sessionId), { method: "POST" });
+                location.reload();
+            });
+            addMessage("assistant", "Hi, I'm Portfolio Buffer. Tell me your ETF holdings and cash balance in USD, or pick a suggested question. I'll analyze allocation and historical risk, compare target weights you propose, and stress-test what happens if prices fall while you need cash. Everything I report comes from the tool calls shown above each answer.");
+            userInput.focus();
+        </script>
+    </body>
+</html>
