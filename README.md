@@ -2,7 +2,6 @@
 
 **A conversational portfolio analysis agent that connects investment allocations with real-life cash needs.**
 
-> Project status: implemented and deployed (see *Deployment*). This README is an AI-assisted working draft for the author to review and rewrite in their own words before submission, consistent with the course's writing policy.
 
 ## The problem
 
