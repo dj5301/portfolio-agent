@@ -302,6 +302,30 @@ def _plan_sales(
     return sales, order
 
 
+def _order_reason(rule: str, order: list[str], shocks: dict[str, float], post: dict[str, float], protected: list[str]) -> str:
+    """Plain-English reason for the sale order, so the model reports it instead of guessing one."""
+    if not order:
+        return "No ETF sales were needed; existing cash covered the expense."
+    parts = []
+    if protected:
+        parts.append(f"{', '.join(protected)} protected, so sold last if at all.")
+    if rule == "cash_first_then_proportional":
+        parts.append("Sales split in proportion to post-shock values, so the order carries no meaning.")
+        return " ".join(parts)
+    # least-fallen-first: explain the first (and decisive) pick
+    first = order[0]
+    rivals = [s for s in post if s != first and s not in protected and post[s] > 0]
+    tied = [s for s in rivals if shocks.get(s, 0.0) == shocks.get(first, 0.0)]
+    if rivals and len(tied) == len(rivals):
+        parts.append(
+            f"All shocks were equal ({shocks.get(first, 0.0):+g}%), so the tie went to the larger position ({first}); "
+            "this ordering is a convention, not a judgment about the funds."
+        )
+    else:
+        parts.append(f"{first} fell the least ({shocks.get(first, 0.0):+g}%) among the ETFs available to sell, so it was sold first.")
+    return " ".join(parts)
+
+
 def stress_test_cash_need(
     holdings: dict,
     cash: float,
@@ -379,6 +403,7 @@ def stress_test_cash_need(
             sold = min(remaining_need, post_etf_total)
             sales, sale_order = _plan_sales(liquidation_rule, sold, post, shocks, protected)
             shortfall = remaining_need - sold
+    sale_order_reason = _order_reason(liquidation_rule, sale_order, shocks, post, protected)
     protected_sold = [s for s in protected if sales[s] > 0.005]
     if protected_sold:
         warnings.append(
@@ -411,7 +436,12 @@ def stress_test_cash_need(
             "cash_used_usd": _round_money(cash_used),
             "cash_shortfall_after_cash_usd": _round_money(remaining_need),
             "etf_sales_usd": {s: _round_money(v) for s, v in sales.items()},
+            "etf_sales_pct_of_post_shock_value": {
+                s: _round_pct(100 * v / post[s]) if post[s] > 0 else 0.0 for s, v in sales.items()
+            },
+            "etf_sales_pct_of_all_etfs": _round_pct(100 * sum(sales.values()) / post_etf_total) if post_etf_total > 0 else 0.0,
             "sale_order": sale_order,
+            "sale_order_reason": sale_order_reason,
             "total_etf_sales_usd": _round_money(sum(sales.values())),
             "expense_covered": shortfall <= 0.005,
             "uncovered_shortfall_usd": _round_money(shortfall),

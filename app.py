@@ -37,7 +37,7 @@ How to work:
 - Rebalances and stress tests are simulations: their outputs do NOT replace the stored portfolio. "My portfolio" / "that same portfolio" always means the holdings the user actually stated, unless the user explicitly asks to continue from a scenario's outcome (then pass those values as `holdings`/`cash` and say you did).
 - Historical risk: first call fetch_historical_prices for every held ETF over the period the user names ("the last year" = one year ending today), then call analyze_portfolio. Report the actual data period, the source, and any warnings the tool returned.
 - Target allocations: call simulate_rebalance only with weights the user proposes (include CASH). Do not invent an "optimal" allocation.
-- Shock + expense questions: call stress_test_cash_need with a percent change for every held ETF, the cash need, and the liquidation rule. Before interpreting, tell the user which rule was used. Default to proportional sales; when the user asks how to avoid selling what fell most, or to compare, run the least-fallen-first rule as well and contrast the two. When the user names a holding they want to keep ("don't touch QQQ"), pass it in `protect` instead of guessing a rule, and say so. Describe sales exactly as the result states them: `funding.etf_sales_usd` and `funding.sale_order` say what was sold and in which order; `after_payment.holdings_usd` says what is left (a holding is "gone" only if it is 0 there). Repeat any `warnings` to the user.
+- Shock + expense questions: call stress_test_cash_need with a percent change for every held ETF, the cash need, and the liquidation rule. Before interpreting, tell the user which rule was used. Run ONE stress test per question with the proportional rule; run a second one (least-fallen-first) only when the user asks how to avoid selling what fell most, or to compare rules, and then contrast the two. When the user names a holding they want to keep ("don't touch QQQ"), pass it in `protect` instead of guessing a rule, and say so. Describe sales exactly as the result states them: `funding.etf_sales_usd` and `funding.sale_order` say what was sold and in which order, and `funding.sale_order_reason` is the ONLY reason you may give for that order (never attribute it to historical drawdown or anything else); `after_payment.holdings_usd` says what is left (a holding is "gone" only if it is 0 there). Repeat any `warnings` to the user.
 - When the user gives a vague shock ("the market tanks 15%"), CALL stress_test_cash_need with that same percent for every held ETF (e.g. {{"VOO": -15, "QQQ": -15}}); then, in the first lines, label it as YOUR assumption ("I assumed every ETF falls 15%"), never as something the user specified, and invite per-ETF numbers.
 - You do not give advice, but never leave a dead end. If asked "should I sell X / buy Y", decline the recommendation in one sentence and immediately offer the concrete simulation you CAN run (e.g. "I can show what moving that money into BND does to your allocation and drawdown; want me to?"). Do the same for live prices: explain you only have historical closes and offer the most recent close you fetched, if any.
 - If a tool returns an error, read its message, fix the inputs or ask the user for the missing piece, and try again. Do not expose raw errors.
@@ -61,6 +61,14 @@ UNBACKED_FIGURE_NUDGE = (
     "Harness check: your draft quoted dollar or percent figures that no tool produced. "
     "Do not estimate. Call the appropriate tool for this scenario now, then answer from its result "
     "following the 'How to answer' rules (one bold opening sentence first)."
+)
+REPEATED_REPLY_NUDGE = (
+    "Harness check: that is word-for-word your previous answer. The user asked something new; answer it from the "
+    "latest tool result (say what changed, e.g. which holding was protected), following the 'How to answer' rules."
+)
+OPENING_NUDGE = (
+    "Harness check: the answer must begin with ONE bold sentence (**...**) stating what the result means for the "
+    "user's life, using the tool's numbers. Rewrite the whole answer starting with that sentence."
 )
 EMPTY_REPLY_NUDGE = (
     "Harness check: your reply was empty. Write the answer for the user from the tool results above, "
@@ -124,6 +132,8 @@ def run_agent(messages: list[dict], state: dict) -> tuple[str, list[dict]]:
     """
     tool_calls = []
     nudge = None  # the correction message, if we had to send one
+    # At low temperature the model sometimes re-emits an earlier answer verbatim when the numbers look the same.
+    previous_replies = {m["content"] for m in messages if m.get("role") == "assistant" and m.get("content")}
 
     for _ in range(MAX_TOOL_ROUNDS):
         reply = complete(messages)
@@ -134,15 +144,22 @@ def run_agent(messages: list[dict], state: dict) -> tuple[str, list[dict]]:
 
         if not reply.tool_calls:
             text = reply.content or ""
-            # Two failure modes the prompt alone does not prevent: the model does the
-            # arithmetic in its head instead of calling a tool, or it returns nothing.
-            # Code catches both: reject the draft once and send it back.
+            # Failure modes the prompt alone does not prevent: the model does the arithmetic
+            # in its head instead of calling a tool, returns nothing, or repeats an old answer.
+            # Code catches them: reject the draft once and send it back.
             problem = None
             if not text.strip():
                 problem = EMPTY_REPLY_NUDGE
+            elif text in previous_replies:
+                problem = REPEATED_REPLY_NUDGE
+                print("harness: verbatim repeat of an earlier reply", flush=True)
             elif invented := unbacked_figures(text, messages):
                 problem = UNBACKED_FIGURE_NUDGE
                 print(f"harness: unbacked figures {sorted(invented)}", flush=True)
+            elif tool_calls and not text.lstrip().startswith("**"):
+                # The one-sentence takeaway is the product's promise; enforce it after any tool use.
+                problem = OPENING_NUDGE
+                print("harness: missing bold opening sentence", flush=True)
             if problem and nudge is None:
                 messages.pop()  # drop the draft so it does not pollute the history
                 nudge = {"role": "user", "content": problem}
