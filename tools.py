@@ -136,12 +136,13 @@ def stress_test_cash_need(
     shocks_pct: dict,
     cash_need: float,
     liquidation_rule: str = "cash_first_then_proportional",
+    protect: list | None = None,
     holdings: dict | None = None,
     cash: float | None = None,
 ) -> str:
     try:
         holdings, cash = _resolve_portfolio(state, holdings, cash)
-        result = portfolio.stress_test_cash_need(holdings, cash, shocks_pct, cash_need, liquidation_rule)
+        result = portfolio.stress_test_cash_need(holdings, cash, shocks_pct, cash_need, liquidation_rule, protect)
     except ValueError as e:
         return _err("invalid_argument", str(e))
     state["last_stress_test"] = result
@@ -259,8 +260,17 @@ TOOLS = [
                             "How to raise cash after spending existing cash. cash_first_then_proportional: sell every ETF in "
                             "proportion to its post-shock value (default; use when the user does not specify). "
                             "cash_first_then_least_fallen_first: sell the best-performing ETF first, exhausting it before the next, "
-                            "so the hardest-hit asset is not sold at its low. Use when the user asks to protect what fell most, "
-                            "to sell bonds/winners first, or to compare rules."
+                            "so the hardest-hit asset is not sold at its low (ties: larger position first). Use when the user asks "
+                            "to avoid selling what fell most, to sell bonds/winners first, or to compare rules."
+                        ),
+                    },
+                    "protect": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "ETFs the user does NOT want to sell, e.g. [\"QQQ\"]. They are sold only if cash plus every other ETF "
+                            "cannot cover the need (the result then carries a warning). Use whenever the user names a holding to "
+                            "keep ('don't touch QQQ', 'I want to hold on to my bonds'). Works with either liquidation rule."
                         ),
                     },
                     "holdings": _HOLDINGS_PARAM,

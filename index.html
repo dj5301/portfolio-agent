@@ -253,7 +253,8 @@
                         ${row("Before", s.before_shock.holdings_usd)}
                         ${row("After shock (" + syms.filter((k) => k !== "CASH").map((k) => k + " " + (s.shocks_pct[k] ?? 0) + "%").join(", ") + ")", s.after_shock.holdings_usd)}
                         ${row("After paying " + fmtUsd(s.cash_need_usd), s.after_payment.holdings_usd)}</table>
-                        <div class="note">Cash used ${fmtUsd(f.cash_used_usd)}; ETF sales ${fmtUsd(f.total_etf_sales_usd)}. ${esc(s.liquidation_rule_description)} Hypothetical shock; simulated sales.</div></div>`);
+                        <div class="note">Cash used ${fmtUsd(f.cash_used_usd)}; ETF sales ${fmtUsd(f.total_etf_sales_usd)}${f.sale_order && f.sale_order.length ? " (sold: " + f.sale_order.map(esc).join(", then ") + ")" : ""}.${s.protected && s.protected.length ? " Protected: " + s.protected.map(esc).join(", ") + "." : ""} ${esc(s.liquidation_rule_description)} Hypothetical shock; simulated sales.</div>
+                        ${(s.warnings || []).map((w) => `<div class="note">⚠ ${esc(w)}</div>`).join("")}</div>`);
                 }
                 const r = st.last_rebalance;
                 if (r) {

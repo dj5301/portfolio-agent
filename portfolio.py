@@ -264,20 +264,42 @@ LIQUIDATION_RULES = {
 }
 
 
-def _plan_sales(rule: str, need: float, post: dict[str, float], shocks: dict[str, float]) -> dict[str, float]:
-    """Dollar sales per ETF to raise `need` from post-shock values. Caller handles the case where assets fall short."""
-    if rule == "cash_first_then_proportional":
-        total = sum(post.values())
-        return {s: need * v / total for s, v in post.items()}
-    if rule == "cash_first_then_least_fallen_first":
-        sales = {s: 0.0 for s in post}
-        for s in sorted(post, key=lambda s: -shocks.get(s, 0.0)):  # best performer first
-            if need <= 0:
-                break
-            sales[s] = min(post[s], need)
-            need -= sales[s]
-        return sales
-    raise ValueError(f"Unsupported liquidation_rule '{rule}'.")
+def _plan_sales(
+    rule: str, need: float, post: dict[str, float], shocks: dict[str, float], protect: list[str]
+) -> tuple[dict[str, float], list[str]]:
+    """Dollar sales per ETF to raise `need` from post-shock values, and the order the ETFs were tapped.
+
+    Protected ETFs are touched only after every unprotected ETF is exhausted. The caller
+    guarantees `need` does not exceed the total post-shock value.
+    """
+    sales = {s: 0.0 for s in post}
+    order: list[str] = []
+    # Two tiers: first the ETFs the user is willing to sell, then the protected ones.
+    tiers = [[s for s in post if s not in protect], [s for s in post if s in protect]]
+
+    for tier in tiers:
+        tier = [s for s in tier if post[s] > 0]
+        if need <= 0 or not tier:
+            continue
+        if rule == "cash_first_then_proportional":
+            total = sum(post[s] for s in tier)
+            take = min(need, total)
+            for s in tier:
+                sales[s] = take * post[s] / total
+            order += sorted(tier, key=lambda s: -post[s])
+            need -= take
+        elif rule == "cash_first_then_least_fallen_first":
+            # Best performer first; ties go to the larger position, then alphabetical, so the
+            # result does not depend on the order the user happened to list the ETFs.
+            for s in sorted(tier, key=lambda s: (-shocks.get(s, 0.0), -post[s], s)):
+                if need <= 0:
+                    break
+                sales[s] = min(post[s], need)
+                need -= sales[s]
+                order.append(s)
+        else:
+            raise ValueError(f"Unsupported liquidation_rule '{rule}'.")
+    return sales, order
 
 
 def stress_test_cash_need(
@@ -286,12 +308,29 @@ def stress_test_cash_need(
     shocks_pct: dict,
     cash_need: float,
     liquidation_rule: str = "cash_first_then_proportional",
+    protect: list | None = None,
 ) -> dict:
-    """Apply percentage shocks to each ETF, then meet an immediate cash expense."""
+    """Apply percentage shocks to each ETF, then meet an immediate cash expense.
+
+    `protect` lists ETFs the user does not want to sell; they are sold only if everything
+    else (cash and the other ETFs) is not enough.
+    """
     holdings, cash = validate_holdings(holdings, cash)
 
     if liquidation_rule not in LIQUIDATION_RULES:
         raise ValueError(f"Unsupported liquidation_rule '{liquidation_rule}'. Supported: {list(LIQUIDATION_RULES)}.")
+
+    protected: list[str] = []
+    warnings: list[str] = []
+    for raw in protect or []:
+        symbol = normalize_symbol(raw)
+        if symbol not in holdings:
+            raise ValueError(f"protect lists {symbol}, which is not in the portfolio ({', '.join(sorted(holdings)) or 'no ETFs'}).")
+        if symbol not in protected:
+            protected.append(symbol)
+    if protected and len(protected) == len(holdings):
+        warnings.append("Every ETF is protected, so the protection has no effect: sales follow the liquidation rule alone.")
+        protected = []
     try:
         cash_need = float(cash_need)
     except (TypeError, ValueError):
@@ -331,14 +370,20 @@ def stress_test_cash_need(
     cash_used = min(cash, cash_need)
     remaining_need = cash_need - cash_used
     sales = {s: 0.0 for s in holdings}
+    sale_order: list[str] = []
     shortfall = 0.0
     if remaining_need > 0:
         if post_etf_total <= 0:
             shortfall = remaining_need
         else:
             sold = min(remaining_need, post_etf_total)
-            sales = _plan_sales(liquidation_rule, sold, post, shocks)
+            sales, sale_order = _plan_sales(liquidation_rule, sold, post, shocks, protected)
             shortfall = remaining_need - sold
+    protected_sold = [s for s in protected if sales[s] > 0.005]
+    if protected_sold:
+        warnings.append(
+            f"Cash and the unprotected ETFs were not enough; {', '.join(protected_sold)} had to be sold too."
+        )
 
     remaining_holdings = {s: post[s] - sales[s] for s in holdings}
     remaining_cash = cash - cash_used
@@ -361,10 +406,12 @@ def stress_test_cash_need(
         "cash_need_usd": _round_money(cash_need),
         "liquidation_rule": liquidation_rule,
         "liquidation_rule_description": LIQUIDATION_RULES[liquidation_rule],
+        "protected": protected,
         "funding": {
             "cash_used_usd": _round_money(cash_used),
             "cash_shortfall_after_cash_usd": _round_money(remaining_need),
             "etf_sales_usd": {s: _round_money(v) for s, v in sales.items()},
+            "sale_order": sale_order,
             "total_etf_sales_usd": _round_money(sum(sales.values())),
             "expense_covered": shortfall <= 0.005,
             "uncovered_shortfall_usd": _round_money(shortfall),
@@ -378,5 +425,7 @@ def stress_test_cash_need(
             "The shock percentages are user-supplied hypotheticals, not estimated probabilities.",
             "Sales are simulated at post-shock values with no taxes, fees, or slippage.",
             LIQUIDATION_RULES[liquidation_rule],
+            *([f"Protected (sold last): {', '.join(protected)}."] if protected else []),
         ],
+        "warnings": warnings,
     }

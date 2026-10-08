@@ -63,14 +63,15 @@ The tool compares the user's proposal; it does not choose an "optimal" allocatio
 
 Combine a hypothetical market shock with an immediate cash requirement.
 
-- **Inputs:** `shocks_pct` for every held ETF (e.g. `{"VTI": -25, "BND": -8}`), `cash_need`, `liquidation_rule` (enum, see below); optional `holdings`/`cash`.
-- **Outputs:** before/after-shock values, cash used, ETF sales per fund, whether the expense is covered, any uncovered shortfall, and the remaining allocation after payment.
+- **Inputs:** `shocks_pct` for every held ETF (e.g. `{"VTI": -25, "BND": -8}`), `cash_need`, `liquidation_rule` (enum, see below), `protect` (list of ETFs the user wants to keep); optional `holdings`/`cash`.
+- **Outputs:** before/after-shock values, cash used, ETF sales per fund and the order they were tapped (`sale_order`), whether the expense is covered, any uncovered shortfall, the remaining allocation after payment, and `warnings`.
 - **Liquidation rules:** both spend existing cash first, then differ in how ETFs are sold.
   - `cash_first_then_proportional` (default): sell every ETF in proportion to its post-shock value.
-  - `cash_first_then_least_fallen_first`: sell the ETF that fell least (or rose most) until it is gone, then the next, so the hardest-hit asset is not sold at its low. In the sample scenario this sells all $1,840 of BND and only $160 of VTI, versus $1,419.56 of VTI under the proportional rule.
+  - `cash_first_then_least_fallen_first`: sell the ETF that fell least (or rose most) until it is gone, then the next, so the hardest-hit asset is not sold at its low. In the sample scenario this sells all $1,840 of BND and only $160 of VTI, versus $1,419.56 of VTI under the proportional rule. Ties (equal shocks) go to the larger position, then alphabetical, so the answer does not depend on the order the user listed the funds.
 
   The rule used is stated in the result; when asked how to avoid selling the worst performer, the agent runs both and contrasts them.
-- **Errors:** missing shock for a held ETF, declines below -100%, negative cash need, unsupported rule. If assets cannot cover the expense, the remaining shortfall is reported instead of impossible trades.
+- **Protecting a holding:** when the user says "don't touch QQQ", the agent passes `protect: ["QQQ"]`. Protected ETFs are sold only after cash and every unprotected ETF are exhausted, under either rule; if that happens the result carries a warning ("Cash and the unprotected ETFs were not enough; QQQ had to be sold too."). This came out of a peer-style test where a user's explicit "keep QQQ" was previously only honored by luck of tie-breaking.
+- **Errors:** missing shock for a held ETF, declines below -100%, negative cash need, unsupported rule, protecting an ETF not in the portfolio. If assets cannot cover the expense, the remaining shortfall is reported instead of impossible trades.
 
 Both simulation tools return a note that the stored portfolio is unchanged, so "that same portfolio" in a follow-up refers to the user's real holdings, not a scenario outcome.
 
