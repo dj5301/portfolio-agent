@@ -255,7 +255,13 @@ TOOLS = [
                     "liquidation_rule": {
                         "type": "string",
                         "enum": list(portfolio.LIQUIDATION_RULES),
-                        "description": "How to raise cash. cash_first_then_proportional: spend cash, then sell ETFs in proportion to post-shock values.",
+                        "description": (
+                            "How to raise cash after spending existing cash. cash_first_then_proportional: sell every ETF in "
+                            "proportion to its post-shock value (default; use when the user does not specify). "
+                            "cash_first_then_least_fallen_first: sell the best-performing ETF first, exhausting it before the next, "
+                            "so the hardest-hit asset is not sold at its low. Use when the user asks to protect what fell most, "
+                            "to sell bonds/winners first, or to compare rules."
+                        ),
                     },
                     "holdings": _HOLDINGS_PARAM,
                     "cash": _CASH_PARAM,

@@ -257,7 +257,27 @@ def simulate_rebalance(holdings: dict, cash: float, target_weights: dict) -> dic
 
 LIQUIDATION_RULES = {
     "cash_first_then_proportional": "Spend existing cash first, then sell ETF holdings in proportion to their post-shock values.",
+    "cash_first_then_least_fallen_first": (
+        "Spend existing cash first, then sell the ETF that fell the least (or rose the most) until it is gone, "
+        "then the next-least-fallen, and so on. Avoids selling the hardest-hit asset at its low."
+    ),
 }
+
+
+def _plan_sales(rule: str, need: float, post: dict[str, float], shocks: dict[str, float]) -> dict[str, float]:
+    """Dollar sales per ETF to raise `need` from post-shock values. Caller handles the case where assets fall short."""
+    if rule == "cash_first_then_proportional":
+        total = sum(post.values())
+        return {s: need * v / total for s, v in post.items()}
+    if rule == "cash_first_then_least_fallen_first":
+        sales = {s: 0.0 for s in post}
+        for s in sorted(post, key=lambda s: -shocks.get(s, 0.0)):  # best performer first
+            if need <= 0:
+                break
+            sales[s] = min(post[s], need)
+            need -= sales[s]
+        return sales
+    raise ValueError(f"Unsupported liquidation_rule '{rule}'.")
 
 
 def stress_test_cash_need(
@@ -307,7 +327,7 @@ def stress_test_cash_need(
     post_etf_total = sum(post.values())
     post_total = post_etf_total + cash
 
-    # Liquidation: cash first, then proportional ETF sales.
+    # Liquidation: cash first, then ETF sales according to the chosen rule.
     cash_used = min(cash, cash_need)
     remaining_need = cash_need - cash_used
     sales = {s: 0.0 for s in holdings}
@@ -317,7 +337,7 @@ def stress_test_cash_need(
             shortfall = remaining_need
         else:
             sold = min(remaining_need, post_etf_total)
-            sales = {s: sold * v / post_etf_total for s, v in post.items()}
+            sales = _plan_sales(liquidation_rule, sold, post, shocks)
             shortfall = remaining_need - sold
 
     remaining_holdings = {s: post[s] - sales[s] for s in holdings}

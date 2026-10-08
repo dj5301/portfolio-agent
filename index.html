@@ -265,7 +265,28 @@
                 location.reload();
             });
             addMessage("assistant", "Hi, I'm Portfolio Buffer. Tell me your ETF holdings and cash balance in USD, or pick a suggested question. I'll analyze allocation and historical risk, compare target weights you propose, and stress-test what happens if prices fall while you need cash. Everything I report comes from the tool calls shown above each answer.");
-            userInput.focus();
+
+            // Cloud Run scales to zero; the first request after idle can take several seconds.
+            // Ping /health before enabling input so the user sees why nothing happens yet.
+            async function warmUp() {
+                const status = addMessage("assistant", "Waking up the server…", true);
+                sendBtn.disabled = true;
+                const t0 = Date.now();
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 30000);
+                    const res = await fetch("/health", { signal: ctrl.signal });
+                    clearTimeout(timer);
+                    if (!res.ok) throw new Error("status " + res.status);
+                    status.remove();
+                } catch (e) {
+                    status.querySelector(".content").textContent = "The server did not respond (" + e.message + "). Try reloading the page.";
+                    status.classList.remove("loading");
+                }
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+            warmUp();
         </script>
     </body>
 </html>

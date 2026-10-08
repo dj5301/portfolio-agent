@@ -63,9 +63,13 @@ The tool compares the user's proposal; it does not choose an "optimal" allocatio
 
 Combine a hypothetical market shock with an immediate cash requirement.
 
-- **Inputs:** `shocks_pct` for every held ETF (e.g. `{"VTI": -25, "BND": -8}`), `cash_need`, `liquidation_rule` (enum; currently `cash_first_then_proportional`); optional `holdings`/`cash`.
+- **Inputs:** `shocks_pct` for every held ETF (e.g. `{"VTI": -25, "BND": -8}`), `cash_need`, `liquidation_rule` (enum, see below); optional `holdings`/`cash`.
 - **Outputs:** before/after-shock values, cash used, ETF sales per fund, whether the expense is covered, any uncovered shortfall, and the remaining allocation after payment.
-- **Liquidation rule:** spend existing cash first, then sell ETFs proportionally to their post-shock values. The rule is stated in the result and the agent explains it before interpreting numbers.
+- **Liquidation rules:** both spend existing cash first, then differ in how ETFs are sold.
+  - `cash_first_then_proportional` (default): sell every ETF in proportion to its post-shock value.
+  - `cash_first_then_least_fallen_first`: sell the ETF that fell least (or rose most) until it is gone, then the next, so the hardest-hit asset is not sold at its low. In the sample scenario this sells all $1,840 of BND and only $160 of VTI, versus $1,419.56 of VTI under the proportional rule.
+
+  The rule used is stated in the result; when asked how to avoid selling the worst performer, the agent runs both and contrasts them.
 - **Errors:** missing shock for a held ETF, declines below -100%, negative cash need, unsupported rule. If assets cannot cover the expense, the remaining shortfall is reported instead of impossible trades.
 
 Both simulation tools return a note that the stored portfolio is unchanged, so "that same portfolio" in a follow-up refers to the user's real holdings, not a scenario outcome.
@@ -96,7 +100,7 @@ Verified: the arithmetic for all three (and the shortfall case) is checked again
 
 - **Backend:** `app.py` adapts the course's `gemini-web-tool-calling` starter: FastAPI, LiteLLM, and the same bounded tool loop (`MAX_TOOL_ROUNDS = 6`). The model is selected with the `MODEL` environment variable (default `vertex_ai/gemini-2.5-flash`).
 - **Tools:** `tools.py` (JSON schemas + dispatcher with session state), `portfolio.py` (pure calculations), `market_data.py` (price fetching, caching, error classification).
-- **Frontend:** `index.html` shows a chat panel with suggested questions and a purpose statement; a holdings summary with an allocation donut; historical-risk cards labeled with the data period; before/after scenario tables for stress tests and rebalances; and an expandable record of each tool call (name, arguments, result) above the answer it informed.
+- **Frontend:** `index.html` shows a chat panel with suggested questions and a purpose statement; a holdings summary with an allocation donut; historical-risk cards labeled with the data period; before/after scenario tables for stress tests and rebalances; and an expandable record of each tool call (name, arguments, result) above the answer it informed. On load it pings `/health` and shows "Waking up the server…" while a scaled-to-zero Cloud Run instance starts. Every answer opens with one bold sentence stating what the numbers mean for the user before the details.
 
 The `/chat` response preserves the starter contract:
 
@@ -116,7 +120,7 @@ Sessions live in process memory. On Cloud Run this requires a single instance (`
 
 Supported assets: cash plus these US-listed ETFs — AGG, BND, GLD, IWM, QQQ, SCHD, SHY, SPY, TIP, TLT, VEA, VNQ, VOO, VTI, VTV, VUG, VWO, VXUS. All values in USD. Not supported: brokerage connections, order execution, individual stocks, options, leverage, tax optimization, return predictions.
 
-Known limitations: the price source is an unofficial endpoint and may rate-limit or change; the most recent trading day sometimes lacks an adjusted close and is dropped (reported as a warning); the historical illustration assumes daily rebalancing to constant weights; only one liquidation rule is implemented.
+Known limitations: the price source is an unofficial endpoint and may rate-limit or change; the most recent trading day sometimes lacks an adjusted close and is dropped (reported as a warning); the historical illustration assumes daily rebalancing to constant weights; liquidation rules ignore taxes and order size.
 
 Portfolio Buffer is an educational analysis and scenario tool, not personalized financial advice. Historical outcomes do not establish future performance. Hypothetical shocks are user inputs, not estimated probabilities.
 
