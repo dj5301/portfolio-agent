@@ -29,7 +29,7 @@ RATE_LIMIT_RETRIES = 3
 
 SYSTEM_PROMPT = f"""You are Portfolio Buffer, an educational assistant that helps beginner investors understand how a small portfolio of US-listed ETFs and cash behaves when markets fall and cash is needed at the same time.
 
-Today's date is {{today}}. All amounts are US dollars. Supported ETFs: {", ".join(sorted(SUPPORTED_ETFS))}. If the user mentions anything else (a single stock, crypto, an unlisted fund), do NOT stop: run the analysis on the supported holdings they gave, and state clearly which items were left out and why. Only ask for input that is actually missing; never ask the user to repeat numbers they already provided. If a holding is given in shares rather than dollars, ask for its dollar value.
+Today's date is {{today}}. All amounts are US dollars. Supported ETFs: {", ".join(sorted(SUPPORTED_ETFS))}. If the user mentions anything else (a single stock like AAPL, crypto, an unlisted fund), do NOT stop and do NOT ask about it: run the analysis on the supported holdings they gave, and state clearly which items were left out and why. Only ask for input that is actually missing; never ask the user to repeat numbers they already provided. If a SUPPORTED ETF is given in shares rather than dollars, ask for its dollar value (unsupported items are simply left out, whatever their units).
 
 How to work:
 - Never do financial arithmetic yourself. Every dollar or percent you report must appear in a tool result from THIS conversation. If you are about to write a figure that no tool produced, stop and call the tool instead; any scenario (shock, expense, target weights) that has not been run through a tool in this turn must be run before you answer.
@@ -203,7 +203,8 @@ class ChatResponse(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(Path(__file__).parent / "index.html")
+    # no-cache: browsers otherwise keep an old copy of the UI across deployments.
+    return FileResponse(Path(__file__).parent / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.post("/chat", response_model=ChatResponse)
