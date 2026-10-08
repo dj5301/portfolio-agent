@@ -131,7 +131,7 @@ def run_agent(messages: list[dict], state: dict) -> tuple[str, list[dict]]:
     Returns the final text and a record of every tool call made along the way.
     """
     tool_calls = []
-    nudge = None  # the correction message, if we had to send one
+    nudges: list[dict] = []  # correction messages we had to send (at most one per kind of problem)
     # At low temperature the model sometimes re-emits an earlier answer verbatim when the numbers look the same.
     previous_replies = {m["content"] for m in messages if m.get("role") == "assistant" and m.get("content")}
 
@@ -160,13 +160,15 @@ def run_agent(messages: list[dict], state: dict) -> tuple[str, list[dict]]:
                 # The one-sentence takeaway is the product's promise; enforce it after any tool use.
                 problem = OPENING_NUDGE
                 print("harness: missing bold opening sentence", flush=True)
-            if problem and nudge is None:
+            # Retry once per kind of problem: fixing the figures sometimes drops the opening sentence.
+            if problem and problem not in {n["content"] for n in nudges}:
                 messages.pop()  # drop the draft so it does not pollute the history
-                nudge = {"role": "user", "content": problem}
-                messages += [nudge]
+                nudges.append({"role": "user", "content": problem})
+                messages += [nudges[-1]]
                 continue
-            if nudge in messages:
-                messages.remove(nudge)  # keep the stored history as the user actually saw it
+            for n in nudges:
+                if n in messages:
+                    messages.remove(n)  # keep the stored history as the user actually saw it
             return text, tool_calls
 
         # The harness, not the model, runs each tool and appends the result.
