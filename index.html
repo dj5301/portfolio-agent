@@ -23,7 +23,22 @@
             header p { color: var(--muted); font-size: 0.85rem; }
             header button { background: none; border: 1px solid var(--line); padding: 0.4rem 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
             main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); min-height: 0; }
-            @media (max-width: 900px) { main { grid-template-columns: 1fr; overflow-y: auto; } #side { border-left: none; border-top: 1px solid var(--line); } }
+            /* Narrow screens: page scrolls normally; chat gets a fixed viewport-sized box, panels stack below it. */
+            @media (max-width: 900px) {
+                body { height: auto; min-height: 100vh; }
+                header { padding: 0.75rem 1rem; align-items: flex-start; }
+                header p { font-size: 0.78rem; }
+                main { display: block; }
+                #chat { height: 82dvh; border-right: none; border-bottom: 1px solid var(--line); }
+                #messages { padding: 1rem; gap: 1rem; }
+                .msg, details.tool { max-width: 100%; }
+                #suggestions { padding: 0 1rem 0.5rem; }
+                #suggestions button { font-size: 0.72rem; }
+                #input-area { padding: 0.75rem 1rem; }
+                #side { padding: 1rem; }
+                .allocation { grid-template-columns: 120px 1fr; }
+                footer { padding: 0.5rem 1rem; }
+            }
 
             /* Chat */
             #chat { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
@@ -158,6 +173,7 @@
                 if (!text) return;
                 userInput.value = "";
                 sendBtn.disabled = true;
+                $("suggestions").style.display = "none"; // starter prompts are only useful before the first message
                 addMessage("you", text);
                 const loading = addMessage("assistant", "Thinking…", true);
                 try {
