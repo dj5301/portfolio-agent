@@ -146,9 +146,9 @@ Environment variables: `MODEL` (LiteLLM model string), `VERTEX_LOCATION` (defaul
 
 ## Deployment
 
-Live: **https://portfolio-agent-1060383691779.us-east4.run.app**
+Live: **https://portfolio-agent-git-1060383691779.europe-west1.run.app**
 
-- GCP Cloud Run (`us-east4`), built with Google Cloud buildpacks from this repository; the `Procfile` sets the entrypoint `uvicorn app:app --host 0.0.0.0 --port $PORT`.
+- GCP Cloud Run (`europe-west1`), built with Google Cloud buildpacks from this repository; the `Procfile` sets the entrypoint `uvicorn app:app --host 0.0.0.0 --port $PORT`.
 - `--max-instances 1` because sessions are held in process memory.
 - Gemini is called through the Cloud Run service account (`roles/aiplatform.user`); no credentials are committed. `VERTEXAI_PROJECT` is set as a service environment variable.
 - Source: https://github.com/dj5301/portfolio-agent. Continuous deployment from `main` via Developer Connect per the course guide.
