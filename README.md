@@ -170,4 +170,3 @@ Keep the service running until grades are released.
 - [x] Every executed tool appears in the `/chat` response and the UI.
 - [x] Invalid symbols, missing inputs, invalid weights, insufficient assets return actionable errors.
 - [x] Three sample queries repeated against the deployed URL with Gemini 2.5 Flash.
-- [ ] Rewrite design-stage statements in the author's own words; record remaining limitations.
