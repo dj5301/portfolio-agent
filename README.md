@@ -2,26 +2,15 @@
 
 **A conversational portfolio analysis agent that connects investment allocations with real-life cash needs.**
 
-
 ## The problem
 
-A portfolio can look diversified while still leaving its owner short of cash when an expense arrives. Students and early-career investors may need to pay tuition, move apartments, or cover another large expense during a market downturn.
+I created this project because, while investing on my own, I realized I wasn’t sure how to allocate my funds. I wanted a tool that would first let me see my current portfolio allocations and historical risk, and then compare how different allocations would affect my portfolio. That’s why I built Portfolio Buffer, which allows me to analyze my portfolio through a conversational interface and calculate how much I need to buy or sell to adjust my allocations. I also added a stress test that simulates a market downturn coinciding with a cash need, to help me understand the consequences of a particular allocation when I need to access funds. Its purpose is to help me understand my options and trade-offs; the final allocation is still up to me.
 
-Portfolio Buffer helps users explore a concrete question:
-
-**"If my investments fall in value and I need cash at the same time, what happens to my portfolio?"**
-
-The target user is a beginner investor who holds a small portfolio of US-listed ETFs and cash. The agent explains the current allocation, calculates historical risk measures, compares a user-defined target allocation, and tests hypothetical cash needs under market shocks.
 
 ## The experience
 
-1. Enter ETF holdings and cash balances in US dollars.
-2. Ask the agent to analyze the portfolio over a historical period.
-3. Compare the current portfolio with target weights you choose.
-4. Specify hypothetical asset declines and a cash expense.
-5. Inspect the calculations, assumptions, source dates, and tool calls behind every answer.
+When I used it myself, I entered a set of holdings: $6,000 in VTI, $2,000 in BND, and $2,000 in cash, and had the agent analyze the allocation and historical risk over the past year. I wanted to know not only the respective allocations of 60%, 20%, and 20% for each asset, but also how volatile this portfolio had been over the past year and what the maximum drawdown was from peak to trough. The agent first retrieves the historical prices for VTI and BND, then performs calculations using Python tools, clearly specifying the actual data range, sources, and calculation assumptions. This allows me to map the abstract concept of “risk” to concrete metrics, rather than just hearing that “this allocation is relatively stable.” I can also continue to propose different target allocations, have it calculate the amounts to buy or sell, and use that to understand the adjustment options before deciding for myself whether to change the allocation.
 
-The agent remembers holdings and assumptions within a session, so follow-ups such as "What if I need another $1,000?" work without restating the portfolio. Separate sessions keep separate histories and portfolio state.
 
 ## Tools
 
@@ -63,15 +52,16 @@ The tool compares the user's proposal; it does not choose an "optimal" allocatio
 Combine a hypothetical market shock with an immediate cash requirement.
 
 - **Inputs:** `shocks_pct` for every held ETF (e.g. `{"VTI": -25, "BND": -8}`), `cash_need`, `liquidation_rule` (enum, see below), `protect` (list of ETFs the user wants to keep); optional `holdings`/`cash`.
-- **Outputs:** before/after-shock values, cash used, ETF sales per fund (in dollars and as a percent of each post-shock holding), the order they were tapped (`sale_order`) and a plain-English `sale_order_reason` computed by the code (so the model cannot invent a rationale), whether the expense is covered, any uncovered shortfall, the remaining allocation after payment, and `warnings`.
+- **Outputs:** before/after-shock values, cash used, ETF sales per fund (in dollars and as a percent of each post-shock holding), the order they were tapped (`sale_order`) and a plain-English `sale_order_reason` computed by the code (to provide an explicit rationale for the model to report), whether the expense is covered, any uncovered shortfall, the remaining allocation after payment, and `warnings`.
 - **Liquidation rules:** both spend existing cash first, then differ in how ETFs are sold.
   - `cash_first_then_proportional` (default): sell every ETF in proportion to its post-shock value.
-  - `cash_first_then_least_fallen_first`: sell the ETF that fell least (or rose most) until it is gone, then the next, so the hardest-hit asset is not sold at its low. In the sample scenario this sells all $1,840 of BND and only $160 of VTI, versus $1,419.56 of VTI under the proportional rule. Ties (equal shocks) go to the larger position, then alphabetical, so the answer does not depend on the order the user listed the funds.
+  - `cash_first_then_least_fallen_first`: sell the ETF that fell least (or rose most) until it is gone, then the next. This delays selling the hardest-hit ETF, but it may still need to be sold if the remaining cash need cannot otherwise be covered. In the sample scenario this sells all $1,840 of BND and only $160 of VTI, versus $1,419.56 of VTI under the proportional rule. Ties (equal shocks) go to the larger position, then alphabetical, so the answer does not depend on the order the user listed the funds.
 
   The rule used is stated in the result; when asked how to avoid selling the worst performer, the agent runs both and contrasts them.
-- **Protecting a holding:** when the user says "don't touch QQQ", the agent passes `protect: ["QQQ"]`. Protected ETFs are sold only after cash and every unprotected ETF are exhausted, under either rule; if that happens the result carries a warning ("Cash and the unprotected ETFs were not enough; QQQ had to be sold too."). This came out of a peer-style test where a user's explicit "keep QQQ" was previously only honored by luck of tie-breaking.
-- **Errors:** missing shock for a held ETF, declines below -100%, negative cash need, unsupported rule, protecting an ETF not in the portfolio. If assets cannot cover the expense, the remaining shortfall is reported instead of impossible trades.
 
+
+- **Protecting a holding:** The `protect` parameter gives selected ETFs lower priority for selling. The simulation uses cash and unprotected ETFs first. If those assets cannot cover the expense, it may still sell protected ETFs and return a warning. Protection means “sell last,” not “never sell.”
+- **Errors:** missing shock for a held ETF, declines below -100%, negative cash need, unsupported rule, protecting an ETF not in the portfolio. If assets cannot cover the expense, the remaining shortfall is reported instead of impossible trades.
 Both simulation tools return a note that the stored portfolio is unchanged, so "that same portfolio" in a follow-up refers to the user's real holdings, not a scenario outcome.
 
 ### Session state
@@ -79,6 +69,8 @@ Both simulation tools return a note that the stored portfolio is unchanged, so "
 Each session holds the conversation plus a portfolio state: holdings, cash, cached price series, and the latest analysis/rebalance/stress-test results. Tools receive this state, so the model does not have to repeat holdings it already supplied (following the course's "offload work from the model" guidance). The UI reads the same state through `GET /state`.
 
 ## Three sample queries
+
+Run the three main queries in order within the same session, then try the follow-up questions.
 
 Grader test cases. Amounts, weights, and shocks are demonstration inputs, not investment recommendations. All three are available as one-click suggestions in the UI.
 
@@ -96,11 +88,27 @@ Grader test cases. Amounts, weights, and shocks are demonstration inputs, not in
 
 Verified: the arithmetic for all three (and the shortfall case) is checked against these numbers in the author's tests, and all three ran end-to-end through the chat interface.
 
+**Follow-ups tested in the same session:**
+
+1. Using the same original portfolio and market shocks, increase
+   the tuition expense to $5,000. Keep the proportional liquidation
+   rule. How much of each ETF would I need to sell?
+
+2. Compare proportional selling with selling the least-fallen ETF
+   first, using the same original portfolio, shocks, and $5,000 expense.
+
+3. Repeat the scenario using the proportional rule, but protect VTI:
+   sell it only after cash and all BND are exhausted.
+   Explain whether any protected VTI still needs to be sold.
+
 ## Interface and agent architecture
 
 - **Backend:** `app.py` adapts the course's `gemini-web-tool-calling` starter: FastAPI, LiteLLM, and the same bounded tool loop (`MAX_TOOL_ROUNDS = 6`). The model is selected with the `MODEL` environment variable (default `vertex_ai/gemini-2.5-flash`).
-- **Harness guard:** the prompt says "never do arithmetic yourself", but in testing Gemini still occasionally answered a stress-test question from its head (wrong by a few hundred dollars) instead of calling the tool. The harness enforces the rule in code: `unbacked_figures()` compares every dollar/percent figure in a draft reply with the numbers the user typed and the numbers tools returned; if a figure has no source, the draft is discarded and the model is sent back once to call the tool. The same one-retry treatment applies to empty replies, to a reply that repeats an earlier answer word for word (seen at low temperature when two scenarios share numbers), and to an answer after tool use that does not open with the bold takeaway sentence. 429 rate-limit errors are retried with backoff.
+
+- **Harness guard:** During testing, I wanted to confirm exactly what “protecting a specific ETF” meant. I compared the results of selling proportionally versus protecting VTI using the same portfolio and found that protecting VTI caused the program to first use up all its cash and BND, but it would still sell a portion of VTI when funds ran low. Therefore, I clearly distinguished between “sell last” and “never sell” in the instructions. The program also checks whether the numbers in the responses have a source, though this does not guarantee that the model’s interpretation of the numbers is necessarily correct.
+
 - **Tools:** `tools.py` (JSON schemas + dispatcher with session state), `portfolio.py` (pure calculations), `market_data.py` (price fetching, caching, error classification).
+
 - **Frontend:** `index.html` shows a chat panel with suggested questions and a purpose statement; a holdings summary with an allocation donut; historical-risk cards labeled with the data period; before/after scenario tables for stress tests and rebalances; and an expandable record of each tool call (name, arguments, result) above the answer it informed. On load it pings `/health` and shows "Waking up the server…" while a scaled-to-zero Cloud Run instance starts. Every answer opens with one bold sentence stating what the numbers mean for the user before the details.
 
 The `/chat` response preserves the starter contract:
@@ -115,15 +123,17 @@ The `/chat` response preserves the starter contract:
 
 Additional endpoints: `GET /state?session_id=` (portfolio state for the UI panels, no price series), `POST /clear?session_id=`, `GET /health`.
 
-Sessions live in process memory. On Cloud Run this requires a single instance (`--max-instances 1`) or a shared store such as Firestore; the first version uses the single-instance setting. External data and user text are treated as data, not instructions (stated in the system prompt; tool results are JSON only).
+Sessions are stored in Python process memory. The deployment uses a single Cloud Run instance, but conversation history and portfolio state are lost if the process restarts or the instance is replaced. Persistent session storage is not implemented. The system prompt instructs the model to treat external content as data, and tools return structured JSON. These measures help organize and separate tool results, but they do not guarantee protection against prompt injection.
 
 ## Scope and limitations
 
 Supported assets: cash plus these US-listed ETFs — AGG, BND, GLD, IWM, QQQ, SCHD, SHY, SPY, TIP, TLT, VEA, VNQ, VOO, VTI, VTV, VUG, VWO, VXUS. All values in USD. Not supported: brokerage connections, order execution, individual stocks, options, leverage, tax optimization, return predictions.
 
-Known limitations: the price source is an unofficial endpoint and may rate-limit or change; the most recent trading day sometimes lacks an adjusted close and is dropped (reported as a warning); the historical illustration assumes daily rebalancing to constant weights; liquidation rules ignore taxes and order size.
+Known limitations: the price source is an unofficial endpoint and may rate-limit or change. When adjusted close is unavailable, the app falls back to unadjusted close and reports a warning. Observations are dropped only when neither price is available. The historical illustration assumes daily rebalancing to constant weights; liquidation rules ignore taxes and order size.
 
 Portfolio Buffer is an educational analysis and scenario tool, not personalized financial advice. Historical outcomes do not establish future performance. Hypothetical shocks are user inputs, not estimated probabilities.
+
+The scenario panel currently shows only the latest stress-test result, so I cannot keep both liquidation rules visible side by side there, even though the chat can compare them. The numerical guard checks whether figures appeared in user inputs or tool results, but it does not verify that the explanation uses them correctly. For example, it cannot reliably distinguish a percentage of one ETF from a percentage of the entire portfolio. I still need to improve scenario comparison and test the accuracy of the model’s explanations more thoroughly. I want to continue this project because comparing how different allocations handle a cash expense helps me understand the consequences of my investment choices.
 
 ## Setup
 
@@ -157,16 +167,3 @@ Live: **https://portfolio-agent-git-1060383691779.europe-west1.run.app**
 - `--max-instances 1` because sessions are held in process memory.
 - Gemini is called through the Cloud Run service account (`roles/aiplatform.user`); no credentials are committed. `VERTEXAI_PROJECT` is set as a service environment variable.
 - Source: https://github.com/dj5301/portfolio-agent. Continuous deployment from `main` via Developer Connect per the course guide.
-
-Access note: the author's Columbia (CUMC) email is not a Google Workspace account, so the project runs under a personal Google account and the service currently allows unauthenticated access instead of the course's IAP `columbia.edu` policy. This was raised with the instructor; IAP can be enabled with per-email grants if required.
-
-Keep the service running until grades are released.
-
-## Verification before submission
-
-- [x] Three sample queries run end-to-end in the browser interface (local).
-- [x] Allocation, rebalance, and cash-shortfall arithmetic checked against known examples.
-- [x] Follow-up questions retain state; independent sessions stay separate.
-- [x] Every executed tool appears in the `/chat` response and the UI.
-- [x] Invalid symbols, missing inputs, invalid weights, insufficient assets return actionable errors.
-- [x] Three sample queries repeated against the deployed URL with Gemini 2.5 Flash.
